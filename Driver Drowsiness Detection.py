@@ -47,10 +47,14 @@ image_points = np.array([
 (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 (rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
-EYE_AR_THRESH = 0.25
+EYE_AR_THRESH = 0.15
 MOUTH_AR_THRESH = 0.79
-EYE_AR_CONSEC_FRAMES = 3
-COUNTER = 0
+DOZE_THRESH = 10.0
+
+eye_close_tag, mouth_open_tag, head_tilt_tag = False, False, False
+blink_cnt, yarn_cnt, doze_cnt = 0, 0, 0
+# EYE_AR_CONSEC_FRAMES = 3
+# COUNTER = 0
 
 # grab the indexes of the facial landmarks for the mouth
 (mStart, mEnd) = (49, 68)
@@ -73,9 +77,9 @@ while True:
         text = "{} face(s) found".format(len(rects))
         cv2.putText(frame, text, (10, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
+        rect = rects[0]
     # loop over the face detections
-    for rect in rects:
+    # for rect in rects:
         # compute the bounding box of the face and draw it on the
         # frame
         (bX, bY, bW, bH) = face_utils.rect_to_bb(rect)
@@ -104,17 +108,25 @@ while True:
 
         # check to see if the eye aspect ratio is below the blink
         # threshold, and if so, increment the blink frame counter
+        cv2.putText(frame, "EAR: {:.2f}".format(ear), (10, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, "EAR threshold: {:.2f}".format(EYE_AR_THRESH), (150, 50), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
         if ear < EYE_AR_THRESH:
-            COUNTER += 1
-            # if the eyes were closed for a sufficient number of times
-            # then show the warning
-            if COUNTER >= EYE_AR_CONSEC_FRAMES:
-                cv2.putText(frame, "Eyes Closed!", (500, 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            # otherwise, the eye aspect ratio is not below the blink
-            # threshold, so reset the counter and alarm
+            cv2.putText(frame, "Blink!", (400, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            if not eye_close_tag:
+                eye_close_tag = True
+                blink_cnt += 1
         else:
-            COUNTER = 0
+            eye_close_tag = False
+
+        cv2.putText(frame, f"Blink {blink_cnt} times", (500, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            
+        # else:
+        #     COUNTER = 0
 
         mouth = shape[mStart:mEnd]
 
@@ -125,12 +137,22 @@ while True:
         mouthHull = cv2.convexHull(mouth)
 
         cv2.drawContours(frame, [mouthHull], -1, (0, 255, 0), 1)
-        cv2.putText(frame, "MAR: {:.2f}".format(mar), (650, 20), 
+        cv2.putText(frame, "MAR: {:.2f}".format(mar), (10, 100), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, "MAR threshold: {:.2f}".format(MOUTH_AR_THRESH), (150, 100), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # Draw text if mouth is open
         if mar > MOUTH_AR_THRESH:
-            cv2.putText(frame, "Yawning!", (800, 20),
+            cv2.putText(frame, "Yawning!", (400, 100),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            if not mouth_open_tag:
+                mouth_open_tag = True
+                yarn_cnt += 1
+        else:
+            mouth_open_tag = False
+
+        cv2.putText(frame, f"Yarn {yarn_cnt} times", (500, 100),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
 
@@ -209,8 +231,21 @@ while True:
         cv2.line(frame, start_point, end_point_alt, (0, 0, 255), 2)
 
         if head_tilt_degree:
-            cv2.putText(frame, 'Head Tilt Degree: ' + str(head_tilt_degree[0]), (170, 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            cv2.putText(frame, f'Head Tilt Degree: {head_tilt_degree[0]:.4f}', (10, 150),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(frame, f'Head Tilt Threshold: {DOZE_THRESH}', (10, 180),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            if head_tilt_degree > DOZE_THRESH and head_tilt_degree < 180.0:
+                cv2.putText(frame, 'Doze Off!', (10, 210),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                if not head_tilt_tag:
+                    head_tilt_tag = True
+                    doze_cnt += 1
+            else:
+                head_tilt_tag = False
+
+            cv2.putText(frame, f"Doze off {doze_cnt} times", (120, 210),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # extract the mouth coordinates, then use the
         # coordinates to compute the mouth aspect ratio
