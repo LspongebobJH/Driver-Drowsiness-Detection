@@ -79,7 +79,8 @@ while True:
     # grayscale
     frame_input = vs.read()
     frame = imutils.resize(frame_input, width=1024, height=576) # TODO(jiahang): different from mask detector
-    frame_mask = imutils.resize(frame_input, width=400)
+    # frame_mask = imutils.resize(frame_input, width=400)
+    frame_mask = frame
     
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     size = gray.shape
@@ -274,9 +275,12 @@ while True:
     # ###########################################
     # ##### NOTE(jiahang): mask recognition #####
     # ###########################################
+    
+    if len(locs) > 0 and len(preds) > 0:
+        box, pred = locs[0], preds[0]
 
-    for (box, pred) in zip(locs, preds):
-        # unpack the bounding box and predictions
+        # for (box, pred) in zip(locs, preds):
+            # unpack the bounding box and predictions
         (startX, startY, endX, endY) = box
         (mask, withoutMask) = pred
 
