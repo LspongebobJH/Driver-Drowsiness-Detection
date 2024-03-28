@@ -9,9 +9,14 @@ import dlib
 import math
 import cv2
 import numpy as np
+import os
 from EAR import eye_aspect_ratio
 from MAR import mouth_aspect_ratio
 from HeadPose import getHeadTiltAndCoords
+
+from tensorflow.keras.models import load_model
+
+from mask_tools import detect_and_predict_mask
 
 # initialize dlib's face detector (HOG-based) and then create the
 # facial landmark predictor
@@ -19,6 +24,15 @@ print("[INFO] loading facial landmark predictor...")
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(
     './dlib_shape_predictor/shape_predictor_68_face_landmarks.dat')
+
+# mask detection network
+face_detector_path = '../Face-Mask-Detection/face_detector/'
+prototxtPath = os.path.join(face_detector_path, 'deploy.prototxt')
+weightsPath = os.path.join(face_detector_path, 'res10_300x300_ssd_iter_140000.caffemodel')
+faceNet = cv2.dnn.readNet(prototxtPath, weightsPath)
+
+mask_detector_path = '../Face-Mask-Detection/mask_detector.model'
+maskNet = load_model(mask_detector_path)
 
 # initialize the video stream and sleep for a bit, allowing the
 # camera sensor to warm up
@@ -63,13 +77,20 @@ while True:
     # grab the frame from the threaded video stream, resize it to
     # have a maximum width of 400 pixels, and convert it to
     # grayscale
-    frame = vs.read()
-    frame = imutils.resize(frame, width=1024, height=576)
+    frame_input = vs.read()
+    frame = imutils.resize(frame_input, width=1024, height=576) # TODO(jiahang): different from mask detector
+    frame_mask = imutils.resize(frame_input, width=400)
+    
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     size = gray.shape
 
     # detect faces in the grayscale frame
     rects = detector(gray, 0)
+    (locs, preds) = detect_and_predict_mask(frame_mask, faceNet, maskNet)
+
+    # ###########################################
+    # ##### NOTE(jiahang): face recognition #####
+    # ###########################################
 
     # check to see if a face was detected, and if so, draw the total
     # number of faces on the frame
@@ -249,6 +270,30 @@ while True:
 
         # extract the mouth coordinates, then use the
         # coordinates to compute the mouth aspect ratio
+    
+    # ###########################################
+    # ##### NOTE(jiahang): mask recognition #####
+    # ###########################################
+
+    for (box, pred) in zip(locs, preds):
+        # unpack the bounding box and predictions
+        (startX, startY, endX, endY) = box
+        (mask, withoutMask) = pred
+
+        # determine the class label and color we'll use to draw
+        # the bounding box and text
+        label = "Mask" if mask > withoutMask else "No Mask"
+        color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
+            
+        # include the probability in the label
+        label = "{}: {:.2f}%".format(label, max(mask, withoutMask) * 100)
+
+        # display the label and bounding box rectangle on the output
+        # frame
+        cv2.putText(frame, label, (startX, startY - 10),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+        cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+        
     # show the frameq
     cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
